@@ -68,6 +68,11 @@ class ToPayModel(db.Model):
         return cls.query.filter_by(paid_by=paid_by).all()
 
     @classmethod
+    def find_by_paying_user(cls, paying_user_id):
+        return cls.query.filter_by(paying_user_id=paying_user_id).all()
+
+
+    @classmethod
     def find_by_user_to_pay(cls,user_to_pay_id):
         return cls.query.filter_by(user_to_pay_id=user_to_pay_id).all()
 

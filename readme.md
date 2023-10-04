@@ -1,9 +1,13 @@
 There are 4 API's
 
 Step - 1 CREATE Database
+
 Firstly create a database in postgres with name splitwise set password "qwerty"
+
 Add table "Users" with Column (id <int>,email <char_var>,name ,password ,mobile_number <int>, login_token <char_var>, date_created <datetime_without_time_zone>)
+
 Add table "Transactions" with Column (id <int>,name <char_var>,discription <char_var>,paid_by <int> (foreign key Users.id), amount <int>)
+
 Add table "ToPay" with column (id <int>,user_to_pay_id <int> (foreign key Users.id), paying_user_id <int> (foreign key Users.id), amount <int>, txn_id <int> (foreign key Transactions.id))
 
 1 - Signup APi (to add a user into th db)

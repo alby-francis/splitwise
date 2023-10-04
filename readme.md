@@ -32,7 +32,9 @@ value - > <token>
 
 ( Ex - header_key   : header_value 
 
-    x-access-token  : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MX0.gOtPOuHpujdkO-basAhTWt9R4Pp2reJnJ4w6CKt89ko)
+    x-access-token  : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MX0.gOtPOuHpujdkO-basAhTWt9R4Pp2reJnJ4w6CKt89ko
+    
+)
 
 
 3 - Txn Api (to add a transaction)

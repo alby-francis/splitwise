@@ -3,3 +3,4 @@
 core/models/__pycache__/transaction.cpython-311.pyc
 core/resources/__pycache__/transaction.cpython-311.pyc
 *.pyc
+/instance/

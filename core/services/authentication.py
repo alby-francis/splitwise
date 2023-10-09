@@ -1,7 +1,7 @@
 from flask import request, make_response, jsonify
 import jwt
 from functools import wraps
-from core import app
+from flask import current_app
 from core.models.user import UserModel
 
 # token decorator
@@ -15,7 +15,7 @@ def token_required(f):
         if not token: # throw error if no token provided
             return make_response(jsonify({"message": "A valid token is missing!"}), 401)
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
             print(data)
             current_user = UserModel.find_by_id(id=data['id'])
 

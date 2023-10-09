@@ -1,4 +1,4 @@
-from core import app
+from flask import current_app
 from core.resources.transaction import createTransaction, total_shares
 from core.services.authentication import token_required
 from core.resources.user import get_one_user,createUser,all_users,edit_user,remove_user

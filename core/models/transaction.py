@@ -1,4 +1,4 @@
-from core import db
+from core.services.db import db
 
 class TransactionModel(db.Model):
     __tablename__ = "Transactions"

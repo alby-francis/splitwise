@@ -1,6 +1,7 @@
 from datetime import datetime
 import jwt
-from core import db,app
+from core.services.db import db
+from flask import current_app
 
 class UserModel(db.Model):
     __tablename__ = "Users"
@@ -44,5 +45,5 @@ class UserModel(db.Model):
         return {'id':self.id, 'name':self.name, 'email':self.email, 'token': self.login_token}
 
     def create_login_token(self):
-        self.login_token = jwt.encode({'id': self.id}, app.config['SECRET_KEY'], 'HS256')
+        self.login_token = jwt.encode({'id': self.id}, current_app.config['SECRET_KEY'], 'HS256')
         return self.login_token

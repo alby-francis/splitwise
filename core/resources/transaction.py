@@ -2,129 +2,134 @@ from core.models.user import UserModel
 from core.models.transaction import TransactionModel,ToPayModel
 from flask import jsonify, request, json
 import pandas as pd
+from flask_restful import Resource, reqparse
 
-def createTransaction(current_user):
-    data = request.get_json()
-    desc = data['description'] if data['description'] else None
-    split_type = ['exact','percent','share']
-    if not data['amount'] or not data['name'] or not data['paid_by']:
-        return {"message": "Required fields are missing"}, 401
-
-    new_txn = TransactionModel(name=data['name'], description=desc, paid_by=data['paid_by'], amount=data['amount'])
-
-    if data['expense'].lower() == 'equal':
-        if not data['split_equal']:
-            return {"message" : "split_equal(dtype=list) key is required"}, 401
-        split_between = data['split_equal']
-
-        #validate_user
-        try:
-            validate_users(split_between)
-        except Exception as e:
-            return {"message": e}, 401
-
-        each_share = round(float(data['amount']) / len(split_between),2)
-
-        try:
-            new_txn.save_to_db()
-        except:
-            return {"message": "Error saving txn"}, 401
-
-        for id in split_between:
-            if id != new_txn.paid_by:
-                to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by,paying_user_id=id,amount=each_share,txn_id=new_txn.id)
-                try:
-                    to_pay.save_to_db()
-                except:
-                    return {"message": "Error saving individual share"}, 401
-
-    elif data['expense'].lower() in split_type:
-        if not data['split_custom']:
-            return {"message" : "split_custom (dtype=dict) key is required"}, 401
-
-        try:
-            all_users = [int(k) for k,v in data['split_custom'].items()]
-            total = sum([float(v) for k,v in data['split_custom'].items()])
-        except :
-            return {"message": "Invalid user id"}, 401
-
-        if data['expense'].lower() == 'exact' and total != float(data['amount']):
-            return {"message": "Individual total and amount dont match"}, 401
-
-        if data['expense'].lower() == 'percent' and total != 100:
-            return {"message": "Individual percentage dont add up to 100"}, 401
-
-        # validate_user
-        try:
-            validate_users(all_users)
-        except Exception as e:
-            return {"message": e}, 401
-
-        try:
-            new_txn.save_to_db()
-        except:
-            return {"message": "Error saving txn"}, 401
+from core.resources.util import validate_users, get_to_pay_dict_list
+from core.services.authentication import token_required
 
 
-        for id in all_users:
-            if id != new_txn.paid_by:
-                if data['expense'].lower() == 'exact':
-                    to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by,paying_user_id=id,amount=float(data['split_custom'][str(id)]),txn_id=new_txn.id)
-                elif data['expense'].lower() == 'percent':
-                    amt = round(float(data['split_custom'][str(id)]) * float(data['amount']/100) ,2)
-                    to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id,amount=amt, txn_id=new_txn.id)
-                elif data['expense'].lower() == 'share':
-                    amt = round(float(data['amount']/total) * data['split_custom'][str(id)], 2)
-                    to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id, amount=amt,
+class Transaction(Resource):
+    parser = reqparse.RequestParser()
+    parser.add_argument('name', required=True)
+    parser.add_argument('description', required=False)
+    parser.add_argument('paid_by', required=True)
+    parser.add_argument('amount', required=True)
+    parser.add_argument('split_custom', required=False)
+    parser.add_argument('split_equal', required=False)
+    parser.add_argument('expense', required=True)
+
+    @token_required
+    def post(self,current_user):
+        data = Transaction.parser.parse_args()
+        desc = data['description'] if data['description'] else None
+        split_type = ['exact', 'percent', 'share']
+        if not data['amount'] or not data['name'] or not data['paid_by']:
+            return {"message": "Required fields are missing"}, 401
+
+        new_txn = TransactionModel(name=data['name'], description=desc, paid_by=data['paid_by'], amount=data['amount'])
+
+        if data['expense'].lower() == 'equal':
+            if not data['split_equal']:
+                return {"message": "split_equal(dtype=list) key is required"}, 401
+            split_between = data['split_equal']
+
+            # validate_user
+            try:
+                validate_users(split_between)
+            except Exception as e:
+                return {"message": e}, 401
+
+            each_share = round(float(data['amount']) / len(split_between), 2)
+
+            try:
+                new_txn.save_to_db()
+            except:
+                return {"message": "Error saving txn"}, 401
+
+            for id in split_between:
+                if id != new_txn.paid_by:
+                    to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id, amount=each_share,
                                         txn_id=new_txn.id)
-                try:
-                    to_pay.save_to_db()
-                except:
-                    return {"message": "Error saving individual share"}, 401
+                    try:
+                        to_pay.save_to_db()
+                    except:
+                        return {"message": "Error saving individual share"}, 401
 
-    return jsonify({"message": "New Txn is created!","response" : new_txn.json()})
+        elif data['expense'].lower() in split_type:
+            if not data['split_custom']:
+                return {"message": "split_custom (dtype=dict) key is required"}, 401
 
-def validate_users(users):
-    for id in users:
-        if not UserModel.find_by_id(id):
-            raise Exception(f"No user found with {id}")
+            try:
+                split_custom = eval(data['split_custom'])
+                all_users = [int(k) for k, v in split_custom.items()]
+                total = sum([float(v) for k, v in split_custom.items()])
+            except:
+                return {"message": "Invalid user id"}, 401
 
-def total_shares(current_user):
-    # To get payment
-    amt_to_get_frm_user = ToPayModel.find_by_user_to_pay(current_user.id)
+            if data['expense'].lower() == 'exact' and total != float(data['amount']):
+                return {"message": "Individual total and amount dont match"}, 401
 
-    get_payment_data_list = get_to_pay_dict_list(amt_to_get_frm_user)
+            if data['expense'].lower() == 'percent' and total != 100:
+                return {"message": "Individual percentage dont add up to 100"}, 401
 
-    gp_df = pd.DataFrame(get_payment_data_list)
-    #gp_df = gp_df.groupby('to_get_pay')['amount'].sum().reset_index()
+            # validate_user
+            try:
+                validate_users(all_users)
+            except Exception as e:
+                return {"message": e}, 401
 
-    # to give payment
-    amt_to_pay_to_user = ToPayModel.find_by_paying_user(current_user.id)
+            try:
+                new_txn.save_to_db()
+            except:
+                return {"message": "Error saving txn"}, 401
 
-    to_pay_data_list = get_to_pay_dict_list(amt_to_pay_to_user)
+            for id in all_users:
+                if id != new_txn.paid_by:
+                    if data['expense'].lower() == 'exact':
+                        to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id,
+                                            amount=float(split_custom[str(id)]), txn_id=new_txn.id)
+                    elif data['expense'].lower() == 'percent':
+                        amt = round(float(split_custom[str(id)]) * float(float(data['amount']) / 100), 2)
+                        to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id, amount=amt,
+                                            txn_id=new_txn.id)
+                    elif data['expense'].lower() == 'share':
+                        amt = round(float(float(data['amount']) / total) * split_custom[str(id)], 2)
+                        to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id, amount=amt,
+                                            txn_id=new_txn.id)
+                    try:
+                        to_pay.save_to_db()
+                    except:
+                        return {"message": "Error saving individual share"}, 401
 
-    tp_df = pd.DataFrame(to_pay_data_list)
-    tp_df['amount'] = -tp_df['amount']
+        return jsonify({"message": "New Txn is created!", "response": new_txn.json()})
 
-    df = pd.concat([tp_df, gp_df], axis=0)
+class Balance(Resource):
+    @token_required
+    def get(self,current_user):
+        amt_to_get_frm_user = ToPayModel.find_by_user_to_pay(current_user.id)
 
-    df = df.groupby(['user_getting_paid','paying_user'])['amount'].sum().reset_index()
-    #tp_df = tp_df.groupby('to_get_pay')['amount'].sum().reset_index()
+        get_payment_data_list = get_to_pay_dict_list(amt_to_get_frm_user)
 
-    response = json.loads(df.to_json(orient='records'))
-    for item in response:
-        if item['amount'] < 0:
-            temp = item['paying_user']
-            item['paying_user'] = item['user_getting_paid']
-            item['user_getting_paid']  = temp
-    return {"message" : "Success", "response": response}, 201
+        gp_df = pd.DataFrame(get_payment_data_list)
+        # gp_df = gp_df.groupby('to_get_pay')['amount'].sum().reset_index()
 
-def get_to_pay_dict_list(obj_list):
-    data_list = []
-    for itm in obj_list:
-        data = {}
-        data['paying_user'] = itm.user_to_pay.email
-        data['user_getting_paid'] = itm.paying_user.email
-        data['amount'] = itm.amount
-        data_list.append(data)
-    return data_list
+        # to give payment
+        amt_to_pay_to_user = ToPayModel.find_by_paying_user(current_user.id)
+
+        to_pay_data_list = get_to_pay_dict_list(amt_to_pay_to_user)
+
+        tp_df = pd.DataFrame(to_pay_data_list)
+        tp_df['amount'] = -tp_df['amount']
+
+        df = pd.concat([tp_df, gp_df], axis=0)
+
+        df = df.groupby(['user_getting_paid', 'paying_user'])['amount'].sum().reset_index()
+        # tp_df = tp_df.groupby('to_get_pay')['amount'].sum().reset_index()
+
+        response = json.loads(df.to_json(orient='records'))
+        for item in response:
+            if item['amount'] < 0:
+                temp = item['paying_user']
+                item['paying_user'] = item['user_getting_paid']
+                item['user_getting_paid'] = temp
+        return {"message": "Success", "response": response}, 201

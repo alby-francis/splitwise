@@ -6,12 +6,11 @@ import pandas as pd
 def createTransaction(current_user):
     data = request.get_json()
     desc = data['description'] if data['description'] else None
-
+    split_type = ['exact','percent','share']
     if not data['amount'] or not data['name'] or not data['paid_by']:
         return {"message": "Required fields are missing"}, 401
 
     new_txn = TransactionModel(name=data['name'], description=desc, paid_by=data['paid_by'], amount=data['amount'])
-
 
     if data['expense'].lower() == 'equal':
         if not data['split_equal']:
@@ -39,8 +38,7 @@ def createTransaction(current_user):
                 except:
                     return {"message": "Error saving individual share"}, 401
 
-    elif data['expense'].lower() == 'exact' or data['expense'].lower() == 'percent':
-
+    elif data['expense'].lower() in split_type:
         if not data['split_custom']:
             return {"message" : "split_custom (dtype=dict) key is required"}, 401
 
@@ -67,18 +65,22 @@ def createTransaction(current_user):
         except:
             return {"message": "Error saving txn"}, 401
 
+
         for id in all_users:
             if id != new_txn.paid_by:
                 if data['expense'].lower() == 'exact':
                     to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by,paying_user_id=id,amount=float(data['split_custom'][str(id)]),txn_id=new_txn.id)
-                else :
+                elif data['expense'].lower() == 'percent':
                     amt = round(float(data['split_custom'][str(id)]) * float(data['amount']/100) ,2)
                     to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id,amount=amt, txn_id=new_txn.id)
+                elif data['expense'].lower() == 'share':
+                    amt = round(float(data['amount']/total) * data['split_custom'][str(id)], 2)
+                    to_pay = ToPayModel(user_to_pay_id=new_txn.paid_by, paying_user_id=id, amount=amt,
+                                        txn_id=new_txn.id)
                 try:
                     to_pay.save_to_db()
                 except:
                     return {"message": "Error saving individual share"}, 401
-
 
     return jsonify({"message": "New Txn is created!","response" : new_txn.json()})
 
